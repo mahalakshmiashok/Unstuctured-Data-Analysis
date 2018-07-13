@@ -1,0 +1,167 @@
+
+# Twitter API - #padmaavat
+```{r}
+library(tm)
+library(dplyr)
+library(ggplot2)
+library(wordcloud)
+library(twitteR)
+library(LSAfun)
+library(lsa)
+library(wordcloud)
+library(RColorBrewer)
+library(twitteR)
+```
+# Access the tweets of #padmaavat using the keys,tokens from the personal twitter account.
+
+```{r}
+consumer_key = '########your twitter key###########'
+consumer_secret = '########your twitter key###########'
+access_token =  '########your twitter  key###########'
+access_secret = '########your twitter key###########'
+
+
+auth = setup_twitter_oauth(consumer_key,consumer_secret,access_token,access_secret)
+tweets = searchTwitter('#padmaavat',n=50, lang = 'en', since = '2018-04-20',until = '2018-04-22')
+View(twListToDF(tweets))
+
+#write.csv(twListToDF(tweets),'C:/padmaavat.csv')
+padmavat = read.csv("C:/padmaavat.csv")
+```
+
+# 1.Text Cleaning
+# Clean and tokenize (split into words) are the two things that we have to do in text cleaning.
+#clean an individual string, removing any characters that are not letters, lowercasing everything, and getting rid of additional spaces between words before tokenizing the resulting text and returning a vector of individual words:
+
+```{r}
+library(tm)
+library(ggplot2)
+library(wordcloud)
+library(dplyr)
+
+
+tweets = read.csv("C:/padmaavat.csv")
+
+tweets$text = as.character(tweets$text)
+corpus = VCorpus(VectorSource(tweets$text))
+corpus
+
+corpus_clean = tm_map(corpus, content_transformer(tolower))
+inspect(corpus[[1]])
+
+
+retain_alphabets = function(x) gsub('[^a-z ]','',x)
+corpus_clean = tm_map(corpus_clean, content_transformer(retain_alphabets))
+
+inspect(corpus_clean[[1]])
+
+common_stopwords = stopwords()
+custom_stopwords = c('date', 'rt','shahidkapoor','deepikapadukone','ranveersingh','slb','movie','film','padmaavat','himeshmankad', 'verdict', 'chart',  'films', 'datepadmaavat', 'blockbustersonuketitukisweety','rameshlaus') #add words that u need removed
+
+all_stopwords = c(common_stopwords,custom_stopwords)
+length(all_stopwords)
+corpus_clean = tm_map(corpus_clean, removeWords, all_stopwords)
+
+corpus_clean = tm_map(corpus_clean, stripWhitespace) #remove extra whitespace
+
+dtm = DocumentTermMatrix(corpus_clean)
+dtm
+
+df_dtm = as.data.frame(as.matrix(dtm))
+
+
+corpus_bow = sort(colSums(df_dtm), decreasing=T)
+head(corpus_bow,50)
+
+barplot(head(corpus_bow,20))
+```
+
+# 2.	Identify sentiment for each tweet and plot a stacked bar for the same. X axis should be days or hours depending upon your data. Y axis should be total number of tweets. Color should be positive, negative or neutral. 
+```{r}
+
+library(RSentiment)
+#padmavat_subset = head(padmaavat, 100)
+
+padmavat$sentiment_unsupervised = calculate_sentiment(padmavat$text)$sentiment
+
+padmavat %>% group_by(created, sentiment_unsupervised) %>% summarise(reviews_count=n()) %>% ggplot(aes(x=created, y=reviews_count, fill=sentiment_unsupervised)) + geom_bar(stat='identity',position='fill') + scale_fill_manual(values=c('red','blue','green','yellow','pink'))
+```
+
+# 4.	Search for negative words in the tweets and display the frequency of those words in a simple bar chart
+```{r, echo=TRUE}
+
+Sys.setenv(JAVA_HOME = 'C:/Program Files/Java/jre-10')
+library(RWeka)
+UnigramTokenizer <- function(x) NGramTokenizer(x, Weka_control(max=1))
+dtm_unigram = DocumentTermMatrix(corpus_clean, control=list(tokenize=UnigramTokenizer))
+df_dtm_unigram= as.data.frame(as.matrix(dtm_unigram))
+View(df_dtm_unigram[1:10,1:100])
+
+unigram_freqs = colSums(df_dtm_unigram)
+top_unigrams= head(sort(unigram_freqs,decreasing=T), 20)
+top_unigrams
+
+#split the unigram by space to get a vector from string 
+bad_words = c('attack','injustice','bad','striderel','horrible','boring')
+good_words = c('good','blockbuster','awesome','success','wonderful','thanks','love','beautiful','thrilling','terrific')
+
+uniagram_absued =c()
+for (unigram in colnames(df_dtm_unigram)){
+    if (length(intersect(unigram,bad_words))>0){
+    uniagram_absued = c(uniagram_absued, unigram)
+  }
+  
+}
+
+uniagram_liked =c()
+for (unigram in colnames(df_dtm_unigram)){
+    if (length(intersect(unigram,good_words))>0){
+    uniagram_liked = c(uniagram_liked, unigram)
+  }
+  
+}
+
+#words which are used in the badwords list
+uniagram_absued
+uniagram_liked
+
+
+```
+
+## 3.	Create word cloud based on top 50 words from those rows in which we have positive sentiment. Likewise create another word cloud based on top 50 words from those rows in which we have negative sentiment
+```{r, echo=TRUE}
+
+wordcloud(uniagram_absued,
+          colors = brewer.pal(8,'Dark2'),
+          random.color = F,
+          scale = c(2,1))
+
+wordcloud(uniagram_liked,
+          colors = brewer.pal(8,'Dark2'),
+          random.color = F,
+          scale = c(2,1))
+
+freq = unname(top_unigrams)  #s
+words = names(top_unigrams)  #t
+wordFreqList =data.frame(freq,words)
+
+```
+# 5.	Present the above visuals in a simple static dashboard
+```{r}
+
+listed_bad_words = c()
+for (i in 1:length(words)){
+    if (length(intersect(words[i],bad_words))>0){
+    listed_bad_words = c(listed_bad_words, words[i])
+  }
+  
+}
+
+final_list= wordFreqList[wordFreqList$words %in% listed_bad_words,]
+
+ggplot(final_list, aes(x=words,y = freq)) +geom_bar(stat = "identity")
+
+
+
+```
+
