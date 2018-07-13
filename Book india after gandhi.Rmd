@@ -1,0 +1,216 @@
+---
+title: "Assignment3"
+author: "Mahalakshmi.B"
+date: "25 April 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r}
+library(gutenbergr)
+```
+```{r}
+book <- gutenberg_download(1661)
+```
+```{r}
+book
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(tidytext)
+```
+```{r}
+book1<- book%>% mutate(story = ifelse(str_detect(text, "ADVENTURE"),text, NA))%>% fill(story)%>% filter(story != "THE ADVENTURES OF SHERLOCK HOLMES")%>%
+  mutate(story = factor(story, levels = unique(story))) 
+```
+```{r}
+book1 %>% count(story)
+```
+```{r}
+tidy_book <- book1 %>% mutate (line = row_number())%>%
+  unnest_tokens(word,text)%>%
+  anti_join(stop_words)%>%
+  filter(word != "holmes")
+```
+```{r}
+tidy_book %>% count(word, sort = TRUE)
+```
+#Explore tf_idf
+```{r}
+library(ggplot2)
+```
+```{r}
+tidy_book %>% count(story, word, sort = TRUE) %>%
+  bind_tf_idf(word,story,n) %>%
+  group_by(story) %>%
+  top_n(10) %>%
+  ungroup %>%
+  mutate(word = reorder(word, tf_idf)) %>%
+  ggplot(aes(word, tf_idf, fill = story))+
+  geom_col(show.legend = FALSE)+facet_wrap(~story, scales = "free")+
+  coord_flip()
+```
+```{r}
+library(stm)
+library(quanteda)
+```
+```{r}
+tidy_dfm <- tidy_book%>% count(story,word,sort=TRUE)%>% cast_dfm(story,word,n)
+topic_model <- stm(tidy_dfm, K = 6, init.type = "Spectral")
+```
+```{r}
+topic_model1 <- stm(tidy_dfm, K = 6, init.type = "LDA")
+```
+```{r}
+summary(topic_model)
+summary(topic_model1)
+```
+```{r}
+td_beta <- tidy(topic_model)
+td_beta
+```
+```{r}
+td_beta1 <- tidy(topic_model1)
+td_beta1
+```
+```{r}
+td_beta%>%group_by(topic)%>%top_n(10)%>%
+  ungroup%>%mutate(term = reorder(term,beta)) %>%
+  ggplot(aes(term, beta, fill = topic))+
+  geom_col(show.legend = FALSE)+facet_wrap(~topic, scales = "free")+
+  coord_flip()
+```
+```{r}
+td_gamma <- tidy(topic_model, matrix = "gamma",document_names = rownames(tidy_dfm))
+
+ggplot(td_gamma, aes(gamma,fill= as.factor(topic)))+geom_histogram(show.legend = FALSE)+facet_wrap(~topic, ncol=3)
+```
+```{r}
+td_gamma <- tidy(topic_model1, matrix = "gamma",document_names = rownames(tidy_dfm))
+
+ggplot(td_gamma, aes(gamma,fill= as.factor(topic)))+geom_histogram(show.legend = FALSE)+facet_wrap(~topic, ncol=3)
+```
+```{r}
+library("RSiteCatalyst")
+library("RTextTools")
+```
+```{r}
+dtm <- create_matrix(tidy_book)
+```
+```{r}
+library(lexRankr)
+```
+```{r}
+dtm <- tidy_book%>% count(story,word,sort=TRUE)%>% cast_dtm(story,word,n)
+```
+```{r}
+dtm
+
+```
+
+#K means clustering
+```{r}
+library(cluster)
+```
+```{r}
+kmean2 <- kmeans(dtm,5)
+```
+```{r}
+barplot(kmean2$cluster,sort(kmean2$cluster,decreasing = TRUE))
+```
+## Using lexRankr library (tried)
+```{r}
+df <- tidy(dtm)
+```
+```{r}
+View(df)
+```
+```{r}
+df %>% 
+  bind_lexrank(document, count ,level="sentences") %>% 
+  arrange(desc(lexrank)) %>% 
+  head(n=15) %>% 
+  select(document, lexrank) 
+```
+
+```{r}
+library(xml2)
+library(rvest)
+library(lexRankr)
+url = "http://www.gutenberg.org/files/1661/1661-h/1661-h.htm"
+page = xml2::read_html(url)
+
+page_text = rvest::html_text(rvest::html_nodes(page," .article-body p"))
+
+#perform lexrank for top 3 sentences
+top_3 = lexRankr::lexRank(page_text,
+                          #only 1 article; repeat same docid for all of input vector
+                          docId = rep(1, length(page_text)),
+                          #return 3 sentences to mimick /u/autotldr's output
+                         n = 3,
+                          continuous = TRUE)
+
+#reorder the top 3 sentences to be in order of appearance in article
+order_of_appearance = order(as.integer(gsub("_","",top_3$sentenceId)))
+#extract sentences in order of appearance
+ordered_top_3 = top_3[order_of_appearance, "sentence"]
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
